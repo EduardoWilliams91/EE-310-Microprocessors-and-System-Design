@@ -38,8 +38,8 @@ REG11 EQU 0x11  ; in HEX
 REG01 EQU 0x01  ; in HEX
 
 ; Definitions
-#define measuredTempInput  -95  ; Input value for measured temperature
-#define refTempInput       -65  ; Input value for reference temperature
+#define measuredTempInput  -90  ; Input value for measured temperature 
+#define refTempInput       -6  ; Input value for reference temperature
 
 ;--------------------------------------------------------------------------
 ; Main Program
@@ -127,10 +127,11 @@ EXTRACT_DECIMAL:
     CLRF   REMAINDER        ; Clear remainder
 
 DIV_LOOP:
-    MOVF   TEMP_VAL, W      ; W = TEMP_VAL
-    SUBLW  10               ; W = 10 - TEMP_VAL
-    BTFSC  STATUS, 0        ; If carry=1 => TEMP_VAL < 10 (done)
+    MOVLW  10
+    SUBWF  TEMP_VAL, W      ; W = TEMP_VAL - 10
+    BTFSS  STATUS, 0        ; If result is negative (TEMP_VAL < 10), exit loop
     GOTO   DONE_DIV
+    
     ; Subtract 10 from TEMP_VAL
     MOVLW  10
     SUBWF  TEMP_VAL, F      ; TEMP_VAL = TEMP_VAL - 10
@@ -139,6 +140,7 @@ DIV_LOOP:
 
 DONE_DIV:
     MOVF   TEMP_VAL, W      ; Store remainder in W (return value)
+    MOVWF  REMAINDER        ; Ensure remainder is stored properly
     RETURN
 
     END
