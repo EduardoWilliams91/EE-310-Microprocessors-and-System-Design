@@ -60,9 +60,9 @@ REG11 EQU 0x11
 REG01 EQU 0x01  
 
 ; Definitions
-#define measuredTempInput  5  ; Input value for measured temperature
-#define refTempInput       15  ; Input value for reference temperature
 
+#define refTempInput       15  ; Input value for reference temperature
+#define measuredTempInput  -5  ; Input value for measured temperature
 ;--------------------------------------------------------------------------
 ; Main Program
 ;--------------------------------------------------------------------------
@@ -136,45 +136,51 @@ MEAS_CONV_SKIP_NEG:
     ;----------------------------------------------------------------------
     ; Temperature Range Checks
     ;----------------------------------------------------------------------
-    ; Check refTemp: >=10 ?
-    MOVLW  10
-    SUBWF  REF_TEMP, 0
-    BTFSS  STATUS, 0        
-    GOTO   NO_ACTION
-
-    ; Check refTemp: <=50 ?
-    MOVLW  50
-    SUBWF  REF_TEMP, 0
-    BTFSC  STATUS, 0        
-    GOTO   NO_ACTION
-
-    ; Check measuredTemp: >= -10 ?
-    MOVLW  0xF6            
-    SUBWF  MEAS_TEMP, 0    
-    BTFSC  STATUS, 0       
-    GOTO   NO_ACTION    
-
-    ; Check measuredTemp: <=60 ?
-    MOVLW  60
-    SUBWF  MEAS_TEMP, 0
-    BTFSC  STATUS, 0       
-    GOTO   NO_ACTION
+;    ; Check refTemp: >=10 ?
+;    MOVLW  10
+;    SUBWF  REF_TEMP, 0
+;    BTFSS  STATUS, 0        
+;    GOTO   NO_ACTION
+;
+;    ; Check refTemp: <=50 ?
+;    MOVLW  50
+;    SUBWF  REF_TEMP, 0
+;    BTFSC  STATUS, 0        
+;    GOTO   NO_ACTION
+;
+;    ; Check measuredTemp: >= -10 ?
+;    MOVLW  0xF6            
+;    SUBWF  MEAS_TEMP, 0    
+;    BTFSC  STATUS, 0       
+;    GOTO   NO_ACTION    
+;
+;    ; Check measuredTemp: <=60 ?
+;    MOVLW  60
+;    SUBWF  MEAS_TEMP, 0
+;    BTFSC  STATUS, 0       
+;    GOTO   NO_ACTION
 
     ;----------------------------------------------------------------------
     ; Compare measuredTemp with refTemp  
     ;----------------------------------------------------------------------  
-    MOVF   MEAS_TEMP, W   ; Load MEAS_TEMP into W register
-    SUBWF  REF_TEMP, W    ; Subtract W from REF_TEMP (W = REF_TEMP - MEAS_TEMP)
 
-    BTFSC  STATUS, 2      ; If MEAS_TEMP == REF_TEMP, execute NO_ACTION
-    GOTO   NO_ACTION  
-
-    BTFSS  STATUS, 0      ; If MEAS_TEMP < REF_TEMP, jump to HEATING_ON
-    GOTO   HEATING_ON  
-
-    ; If neither of the above conditions are met, then MEAS_TEMP > REF_TEMP
-    GOTO   TURN_ON_COOLING  
-
+    _CHECK_NEGATIVE:
+    BTFSC   MEAS_TEMP, 7 ; Skip if bit 7 is 0 (measuredTemp is positive)
+    NEGF    MEAS_TEMP    ; If bit 7 is 1, perform two's complement negation
+    
+_COMPARE:
+    MOVF    MEAS_TEMP, W ; Load measuredTemp into WREG
+    CPFSEQ  REF_TEMP	    ; Skip next if measuredTemp == refTemp
+    GOTO    _CHECK_GREATER  ; Check if measuredTemp > refTemp
+    GOTO    NO_ACTION	    ; if measuredTemp == refTemp
+   
+_CHECK_GREATER:
+    CPFSLT  REF_TEMP	    ; Skip next if measuredTemp > refTemp
+    GOTO    HEATING_ON	    ; if measuredTemp < refTemp
+    GOTO    TURN_ON_COOLING	    ; if measuredTemp > refTemp
+    
+;------------------------------------------------------------------------------------
+    
 TURN_ON_COOLING:
     BSF    PORTD, 2       ; Turn ON Cooling
     BCF    PORTD, 1       ; Ensure Heating is OFF
