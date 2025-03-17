@@ -5,8 +5,8 @@ PROCESSOR 18F46K42              ; Define the target microcontroller
 
 ;---------------------
 ; Program Constants
-;---------------------
-REG10   equ     10h             ; Define REG10 as a register at address 0x10 to store the digit
+;---------------------	
+    REG10   equ     10h             ; Define REG10 as a register at address 0x10 to store the digit
 
 ;---------------------
 ; Main Program
@@ -29,11 +29,11 @@ _loop:
     
     INCF     REG10, F           ; Increment REG10
     MOVF     REG10, W           ; Move REG10 to W
-    SUBLW    10                 ; Compare REG10 with 10
-    BTFSS    STATUS, 2          ; Skip next instruction if REG10 == 10
-    BRA      _loop              ; If not 10, repeat loop
+    SUBLW    16                 ; Compare REG10 with 16 (for full range 0-F)
+    BTFSS    STATUS, 2          ; Skip next instruction if REG10 == 16
+    BRA      _loop              ; If not 16, repeat loop
 
-    CLRF     REG10              ; Reset REG10 to 0 when reaching 10
+    CLRF     REG10              ; Reset REG10 to 0 when reaching 16
     BRA      _loop              ; Restart counting from 0
 
 ;---------------------
@@ -74,16 +74,22 @@ digitTable:
     DB  0b00001110  ; 7
     DB  0b11111110  ; 8
     DB  0b00111110  ; 9
+    DB  0b10111110  ; A
+    DB  0b11110010  ; B
+    DB  0b11011000  ; C
+    DB  0b11100110  ; D
+    DB  0b11111000  ; E
+    DB  0b10111000  ; F
 
 ;---------------------
 ; 2-Second Delay Subroutine
 ;---------------------
 _delay2Seconds:
-    MOVLW    155           ; Outer loop count (tune as needed)
+    MOVLW    255           ; Outer loop count (tune as needed)
     MOVWF    20h          ; Store in a temp register
 
 _delayOuter:
-    MOVLW    255          ; Inner loop count
+    MOVLW    200          ; Inner loop count
     MOVWF    21h          ; Store in another temp register
 
 _delayInner:
