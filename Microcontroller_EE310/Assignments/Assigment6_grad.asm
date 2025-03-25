@@ -30,7 +30,12 @@
 ;       GITHUB: https://github.com/EduardoWilliams91/EE-310-Microprocessors-and-System-Design/tree/main/Microcontroller_EE310
     
     
-    
+;---------------------
+; Title: Keypad-Controlled Countdown and Increment Display Using 7-Segment
+;---------------------
+
+; Program behavior summary provided above.
+
 #include "./AssemblyConfig.inc"
 #include <xc.inc>
 
@@ -39,215 +44,260 @@ PROCESSOR 18F46K42
 ;---------------------
 ; Variable Definitions
 ;---------------------
-REG10       EQU 0x10      ; Digit storage
-what_button EQU 0x11      ; Stores keypad value
-DELAY_OUTER EQU 0x20      ; Delay outer loop
-DELAY_INNER EQU 0x21      ; Delay inner loop
+REG10       EQU 0x10      ; Holds current count value (0–15)
+what_button EQU 0x11      ; Stores the detected keypad value
+DELAY_OUTER EQU 0x20      ; Outer loop counter for delay
+DELAY_INNER EQU 0x21      ; Inner loop counter for delay
 
 ;---------------------
 ; Program Start
 ;---------------------
-    PSECT absdata,abs,ovrld
+PSECT absdata,abs,ovrld
 
-    ORG 0
-    GOTO _setup
+ORG 0
+GOTO _setup               ; Jump to setup routine
 
-    ORG 0x0020
+ORG 0x0020                ; Start of program code
 
 ;---------------------
 ; Setup Routine
 ;---------------------
 _setup:
-    CLRF REG10
-    RCALL _setupPortD
-    RCALL _setupPortB
-    CLRF PORTB
-    GOTO mainLoop
+    CLRF REG10            ; Clear counter to 0
+    RCALL _setupPortD     ; Initialize PORTD for 7-segment output
+    RCALL _setupPortB     ; Initialize PORTB for keypad I/O
+    CLRF PORTB            ; Clear PORTB
+    GOTO mainLoop         ; Start main loop
 
 ;---------------------
-; Reset and Go Back to Wait
+; Reset to zero and wait again for key "2"
 ;---------------------
 _reset_and_restart:
-    CLRF REG10
-    CALL _displayDigit
-    GOTO mainLoop
+    CLRF REG10            ; Reset count
+    CALL _displayDigit    ; Show "0" on 7-segment
+    GOTO mainLoop         ; Wait for key press again
 
 ;---------------------
-; Main Program Loop
+; Main Loop - Wait for key "2" to start
 ;---------------------
 mainLoop:
 waitForKey2:
-    ; Always display "0" while waiting
-    MOVLW 0b11011110      ; 7-segment code for "0"
+    MOVLW 0b11011110      ; Display "0" on 7-segment
     MOVWF LATD
 
-    RCALL _check_keypad
-
+    RCALL _check_keypad   ; Scan keypad
     MOVF what_button, W
-    XORLW 0b11101100      ; Check if key "2" (now starts countdown)
+    XORLW 0b11101100      ; Compare with code for key "2"
     BTFSS STATUS, 2
-    GOTO waitForKey2      ; Keep waiting
+    GOTO waitForKey2      ; If not key "2", keep waiting
 
-    MOVLW 15
+    MOVLW 15              ; Load initial countdown value
     MOVWF REG10
-    GOTO _decrement_loop
+    GOTO _decrement_loop  ; Begin countdown
 
 ;---------------------
-; Decrement Countdown Loop
+; Decrement Mode (while key "2" is held)
+; - Counts down REG10 every 2 seconds
+; - Can switch to Increment Mode if key "1" is held
+; - Can reset if key "3" is pressed
+; - Pauses countdown if no key or wrong key is held
 ;---------------------
 _decrement_loop:
-    CALL _displayDigit
+    CALL _displayDigit         ; Display current value (REG10) on 7-segment
 
 wait_for_hold:
-    RCALL _check_keypad
+    RCALL _check_keypad        ; Check for any key press
 
-    ; Check if "1" is pressed → enter increment loop
+    ; --- Switch to Increment Mode if key "1" is pressed ---
+    MOVF what_button, W        ; Load detected key
+    XORLW 0b00000110           ; Compare with "1" pattern
+    BTFSC STATUS, 2            ; If equal (Z bit set), skip next
+    RCALL _increment_loop      ; If key "1" held, jump to increment logic
+
+    ; --- Reset everything if key "3" is pressed ---
     MOVF what_button, W
-    XORLW 0b00000110     ; "1"
+    XORLW 0b01101110           ; Compare with "3" pattern
     BTFSC STATUS, 2
-    RCALL _increment_loop
+    GOTO _reset_and_restart    ; If match, reset system
 
-    ; Check if "3" is pressed → reset and go to mainLoop
+    ; --- Pause: wait until key "2" is held ---
     MOVF what_button, W
-    XORLW 0b01101110     ; "3"
-    BTFSC STATUS, 2
-    GOTO _reset_and_restart
+    XORLW 0b11101100           ; Compare with "2" pattern
+    BTFSS STATUS, 2            ; If not equal, skip next
+    GOTO wait_for_hold         ; Wait here until "2" is held
 
-    ; Check if "2" is held → resume countdown
-    MOVF what_button, W
-    XORLW 0b11101100     ; "2"
-    BTFSS STATUS, 2
-    GOTO wait_for_hold
+    ; --- Continue countdown ---
+    CALL _delay2Seconds        ; Wait before next decrement
+    DECF REG10, F              ; Decrement value in REG10
 
-    ; Continue countdown
-    CALL _delay2Seconds
-    DECF REG10, F
-
-    ; If reached 0, go back to wait state
+    ; --- If count reaches 0, restart main loop ---
     MOVF REG10, W
-    XORLW 0
-    BTFSC STATUS, 2
-    GOTO mainLoop
+    XORLW 0                    ; Compare with 0
+    BTFSC STATUS, 2            ; If REG10 == 0
+    GOTO mainLoop              ; Jump to main loop
 
-    GOTO _decrement_loop
+    GOTO _decrement_loop       ; Continue countdown loop
+
 
 ;---------------------
-; Increment Loop for Key "1"
+; Increment Mode (while key "1" is held)
+; - Continuously increments the value in REG10
+; - Displays the value on the 7-segment display
+; - Increments every 2 seconds while key "1" is held
+; - Wraps from 15 (0x0F) back to 0
 ;---------------------
 _increment_loop:
-    ; Stay here while key "1" is held
 inc_loop_check:
-    CALL _displayDigit
-    CALL _delay2Seconds
+    CALL _displayDigit         ; Show current digit (value in REG10) on display
+    CALL _delay2Seconds        ; Wait 2 seconds before next increment
 
-    ; Always increment
-    INCF REG10, F
-    MOVF REG10, W
-    XORLW 16
-    BTFSS STATUS, 2
-    GOTO inc_check_release
-    CLRF REG10             ; Wrap around to 0
+    INCF REG10, F              ; Increment digit value in REG10
+    MOVF REG10, W              ; Move updated value to WREG for comparison
+    XORLW 16                   ; Compare with 16 (0x10)
+    BTFSS STATUS, 2            ; Skip next if REG10 != 16
+    GOTO inc_check_release     ; If not equal to 16, skip reset
+
+    CLRF REG10                 ; If REG10 == 16, reset to 0 (wrap around)
 
 inc_check_release:
-    RCALL _check_keypad
-    MOVF what_button, W
-    XORLW 0b00000110     ; is key "1" still held?
-    BTFSS STATUS, 2
-    RETURN               ; Exit loop if released
+    RCALL _check_keypad        ; Re-check keypad input (non-destructive call)
+    MOVF what_button, W        ; Load detected key pattern
+    XORLW 0b00000110           ; Compare with "1" key pattern
+    BTFSS STATUS, 2            ; Skip next if still holding key "1"
+    RETURN                     ; If released, exit increment loop
 
-    GOTO _increment_loop
+    GOTO _increment_loop       ; If still holding key "1", loop back and repeat
 
 ;---------------------
-; Display Current REG10 on 7-segment
+; Display REG10 value on 7-segment
 ;---------------------
 _displayDigit:
-    CALL _getDigitPattern
-    MOVWF LATD
+    CALL _getDigitPattern  ; Get 7-segment pattern for value
+    MOVWF LATD             ; Output to 7-segment
     RETURN
 
 ;---------------------
-; Get 7-segment Pattern for Value in REG10
+; Get 7-segment pattern from lookup table
+; Input: REG10 holds digit value (0x00–0x0F)
+; Output: WREG holds 7-segment pattern for digit
 ;---------------------
 _getDigitPattern:
-    LFSR 0, digitTable
-    MOVF FSR0H, W
-    MOVWF TBLPTRH
-    MOVF FSR0L, W
-    MOVWF TBLPTRL
+    LFSR 0, digitTable     ; Load address of digitTable into FSR0 (File Select Register 0)
+    MOVF FSR0H, W          ; Move high byte of FSR0 to WREG
+    MOVWF TBLPTRH          ; Set high byte of table pointer to point to lookup table
+    MOVF FSR0L, W          ; Move low byte of FSR0 to WREG
+    MOVWF TBLPTRL          ; Set low byte of table pointer
 
-    BANKSEL REG10
-    MOVF REG10, W
-    ADDWF TBLPTRL, F
+    BANKSEL REG10          ; Ensure we are in the correct bank to access REG10
+    MOVF REG10, W          ; Move digit value (0–15) from REG10 into WREG
+    ADDWF TBLPTRL, F       ; Add digit value to table pointer to get correct entry address
+                           ; (Assumes digitTable is at a page boundary, so TBLPTRH doesn't change)
 
-    TBLRD*
-    MOVF TABLAT, W
-    RETURN
+    TBLRD*                 ; Table read: load byte at TBLPTR into TABLAT
+    MOVF TABLAT, W         ; Move digit pattern from TABLAT into WREG (output)
+    RETURN                 ; Return with 7-segment pattern in WREG
 
 ;---------------------
-; Setup PORTD
+; 7-Segment Digit Lookup Table (0–F in HEX)
+; Each byte represents segment bits: abcdefg. Bit 7 may be unused or used for DP.
+;---------------------
+ORG 0x300                 ; Place table at program memory address 0x300
+digitTable:
+    DB  0b11011110 ; 0 => Segments a b c d e f (g off)
+    DB  0b00000110 ; 1 => Segments c f
+    DB  0b11101100 ; 2 => Segments a b d e g
+    DB  0b01101110 ; 3 => Segments a c d e g
+    DB  0b00110110 ; 4 => Segments b c f g
+    DB  0b01111010 ; 5 => Segments a c d f g
+    DB  0b11111010 ; 6 => Segments a c d e f g
+    DB  0b00001110 ; 7 => Segments a c f
+    DB  0b11111110 ; 8 => All segments on (except DP)
+    DB  0b00111110 ; 9 => Segments a b c d f g
+    DB  0b10111110 ; A => Segments a b c e f g
+    DB  0b11110010 ; B => Segments c d e f g
+    DB  0b11011000 ; C => Segments a d e f
+    DB  0b11100110 ; D => Segments b c d e g
+    DB  0b11111000 ; E => Segments a d e f g
+    DB  0b10111000 ; F => Segments a e f g
+
+;---------------------
+; Setup PORTD for 7-segment output
 ;---------------------
 _setupPortD:
-    BANKSEL PORTD
-    CLRF PORTD
-    BANKSEL LATD
-    CLRF LATD
-    BANKSEL ANSELD
-    CLRF ANSELD
-    BANKSEL TRISD
-    MOVLW 0x00
-    MOVWF TRISD
-    RETURN
+    BANKSEL PORTD          ; Select the bank containing PORTD
+    CLRF PORTD             ; Clear PORTD output latch (just in case)
+
+    BANKSEL LATD           ; Select bank for LATD (output latch)
+    CLRF LATD              ; Clear LATD to ensure all outputs start LOW
+
+    BANKSEL ANSELD         ; Select bank for ANSELD (analog select register)
+    CLRF ANSELD            ; Set all PORTD pins to digital mode
+
+    BANKSEL TRISD          ; Select bank for TRISD (data direction register)
+    MOVLW 0x00             ; WREG = 0x00 (all bits 0)
+    MOVWF TRISD            ; Set all PORTD pins as outputs (0 = output)
+    RETURN                 ; Done with PORTD setup
 
 ;---------------------
-; Setup PORTB
+; Setup PORTB for keypad I/O
 ;---------------------
 _setupPortB:
-    BANKSEL PORTB
-    CLRF PORTB
-    BANKSEL LATB
-    CLRF LATB
-    BANKSEL ANSELB
-    CLRF ANSELB
-    BANKSEL TRISB
-    MOVLW 0b11111000     ; RB0–RB2 = output (columns), RB3–RB7 = input (rows)
-    MOVWF TRISB
-    RETURN
+    BANKSEL PORTB          ; Select the bank containing PORTB
+    CLRF PORTB             ; Clear PORTB (optional reset)
+
+    BANKSEL LATB           ; Select bank for LATB (output latch)
+    CLRF LATB              ; Clear LATB to ensure known output state
+
+    BANKSEL ANSELB         ; Select bank for ANSELB (analog select register)
+    CLRF ANSELB            ; Set all PORTB pins to digital mode
+
+    BANKSEL TRISB          ; Select bank for TRISB (data direction register)
+    MOVLW 0b11111000       ; Set RB0–RB2 as outputs (columns), RB3–RB7 as inputs (rows)
+                           ; Binary: 11111000 = 0xF8
+                           ; Bit value 1 = input (rows), 0 = output (columns)
+    MOVWF TRISB            ; Apply direction settings to PORTB
+    RETURN                 ; Done with PORTB setup
+
 
 ;---------------------
-; Keypad Scanning
+; Scan keypad for key press (simplified 4x1 keypad)
+; Only checks RB3 (one row), assumes 3 columns on RB0–RB2
+; Stores corresponding 7-segment pattern into 'what_button'
 ;---------------------
 _check_keypad:
-    CLRF what_button
+    CLRF what_button        ; Clear the key value (default to "no key pressed")
 
-    ; Clear columns
-    BCF LATB, 0
-    BCF LATB, 1
-    BCF LATB, 2
+    ; Clear all columns before starting scan
+    BCF LATB, 0             ; Set Column 1 (RB0) LOW
+    BCF LATB, 1             ; Set Column 2 (RB1) LOW
+    BCF LATB, 2             ; Set Column 3 (RB2) LOW
 
-    ; --- Column 1 ---
-    BSF LATB, 0
-    NOP
-    BTFSC PORTB, 3
-    MOVLW 0b00000110     ; "1"
-    BCF LATB, 0
+    ; --- Scan Column 1 ---
+    BSF LATB, 0             ; Set Column 1 HIGH (RB0 = 1)
+    NOP                     ; Small delay to allow signal to stabilize
+    BTFSC PORTB, 3          ; Check if Row 1 (RB3) is HIGH (key pressed)
+    MOVLW 0b00000110        ; If so, load 7-segment code for "1" into WREG
+    BCF LATB, 0             ; Set Column 1 back to LOW
 
-    ; --- Column 2 ---
-    BSF LATB, 1
-    BTFSC PORTB, 3
-    MOVLW 0b11101100     ; "2"
-    BCF LATB, 1
+    ; --- Scan Column 2 ---
+    BSF LATB, 1             ; Set Column 2 HIGH (RB1 = 1)
+    BTFSC PORTB, 3          ; Check if Row 1 (RB3) is HIGH
+    MOVLW 0b11101100        ; If so, load 7-segment code for "2"
+    BCF LATB, 1             ; Set Column 2 LOW
 
-    ; --- Column 3 ---
-    BSF LATB, 2
-    BTFSC PORTB, 3
-    MOVLW 0b01101110     ; "3"
-    BCF LATB, 2
+    ; --- Scan Column 3 ---
+    BSF LATB, 2             ; Set Column 3 HIGH (RB2 = 1)
+    BTFSC PORTB, 3          ; Check if Row 1 (RB3) is HIGH
+    MOVLW 0b01101110        ; If so, load 7-segment code for "3"
+    BCF LATB, 2             ; Set Column 3 LOW
 
-    MOVWF what_button
-    RETURN
+    MOVWF what_button       ; Store result in 'what_button' register
+                            ; If no key was pressed, WREG still holds 0
+    RETURN                  ; Done scanning
+
 
 ;---------------------
-; Delay for 2 seconds
+; Delay for ~2 seconds
 ;---------------------
 _delay2Seconds:
     MOVLW  200
@@ -264,26 +314,6 @@ inner_loop:
     GOTO outer_loop
     RETURN
 
-;---------------------
-; 7-segment digit lookup table
-;---------------------
-  ORG 0x300
-digitTable:
-    DB  0b11011110 ; 0
-    DB  0b00000110 ; 1
-    DB  0b11101100 ; 2
-    DB  0b01101110 ; 3
-    DB  0b00110110 ; 4
-    DB  0b01111010 ; 5
-    DB  0b11111010 ; 6
-    DB  0b00001110 ; 7
-    DB  0b11111110 ; 8
-    DB  0b00111110 ; 9
-    DB  0b10111110 ; A
-    DB  0b11110010 ; B
-    DB  0b11011000 ; C
-    DB  0b11100110 ; D
-    DB  0b11111000 ; E
-    DB  0b10111000 ; F
 
-    END
+
+END
