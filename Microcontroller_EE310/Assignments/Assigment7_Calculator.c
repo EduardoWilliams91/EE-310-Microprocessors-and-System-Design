@@ -69,62 +69,77 @@
 #define SEGMENT_9     0b00111110  // Segments: A B C D F G
 #define SEGMENT_E     0b11111000  // Segments: A D E F G
 
-// === Returns segment pattern corresponding to input key ===
+// Function to convert a key input into the corresponding 7-segment display pattern
 unsigned char getSegment(char key) {
+    // Use a switch-case to map the input key to the corresponding segment pattern
     switch (key) {
-        case 0: return SEGMENT_0;
-        case 1: return SEGMENT_1;
-        case 2: return SEGMENT_2;
-        case 3: return SEGMENT_3;
-        case 4: return SEGMENT_4;
-        case 5: return SEGMENT_5;
-        case 6: return SEGMENT_6;
-        case 7: return SEGMENT_7;
-        case 8: return SEGMENT_8;
-        case 9: return SEGMENT_9;
-        case 'E': return SEGMENT_E;
-        default: return SEGMENT_OFF;
+        case 0: return SEGMENT_0; // If key is 0, return the pattern for displaying '0'
+        case 1: return SEGMENT_1; // If key is 1, return the pattern for displaying '1'
+        case 2: return SEGMENT_2; // If key is 2, return the pattern for displaying '2'
+        case 3: return SEGMENT_3; // If key is 3, return the pattern for displaying '3'
+        case 4: return SEGMENT_4; // If key is 4, return the pattern for displaying '4'
+        case 5: return SEGMENT_5; // If key is 5, return the pattern for displaying '5'
+        case 6: return SEGMENT_6; // If key is 6, return the pattern for displaying '6'
+        case 7: return SEGMENT_7; // If key is 7, return the pattern for displaying '7'
+        case 8: return SEGMENT_8; // If key is 8, return the pattern for displaying '8'
+        case 9: return SEGMENT_9; // If key is 9, return the pattern for displaying '9'
+        case 'E': return SEGMENT_E; // If key is character 'E', return the pattern for 'E'
+        default: return SEGMENT_OFF; // For any other input, turn off the display
     }
 }
 
-// === Scans keypad and returns pressed key, supports '*' to reset ===
+
+// Function to detect and return the pressed key from a 4x4 keypad
 char getKeypadKey() {
     while (1) {
-        LATA |= 0x0F;  // Set all row outputs high
+        // Set all row pins (RA0 - RA3) to high (inactive)
+        LATA |= 0x0F;  // 0x0F = 00001111
 
+        // Loop through each row one by one
         for (char row = 0; row < 4; row++) {
-            // Set one row low at a time
-            LATAbits.LATA0 = (row != 0);
+
+            // Activate the current row by pulling it LOW and others HIGH
+            LATAbits.LATA0 = (row != 0);  // Only set LOW if current row
             LATAbits.LATA1 = (row != 1);
             LATAbits.LATA2 = (row != 2);
             LATAbits.LATA3 = (row != 3);
 
-            __delay_ms(1);
+            __delay_ms(1);  // Short delay to settle the output
 
-            // Check column inputs (RC4 to RC7)
+            // Check if any column input (RC4 to RC7) is LOW (i.e., key press detected)
+
+            // Check Column 1 (RC4)
             if (!PORTCbits.RC4) {
-                while (!PORTCbits.RC4); __delay_ms(5);
-                if (row == 0) return 1;
-                if (row == 1) return 4;
-                if (row == 2) return 7;
+                // Wait until the key is released (debounce)
+                while (!PORTCbits.RC4) __delay_ms(5);
+                // Return corresponding key based on row
+                if (row == 0) return '1';
+                if (row == 1) return '4';
+                if (row == 2) return '7';
                 if (row == 3) return '*';
             }
+
+            // Check Column 2 (RC5)
             if (!PORTCbits.RC5) {
-                while (!PORTCbits.RC5); __delay_ms(5);
-                if (row == 0) return 2;
-                if (row == 1) return 5;
-                if (row == 2) return 8;
-                if (row == 3) return 0;
+                while (!PORTCbits.RC5) __delay_ms(5);
+                if (row == 0) return '2';
+                if (row == 1) return '5';
+                if (row == 2) return '8';
+                if (row == 3) return '0';
             }
+
+            // Check Column 3 (RC6)
             if (!PORTCbits.RC6) {
-                while (!PORTCbits.RC6); __delay_ms(5);
-                if (row == 0) return 3;
-                if (row == 1) return 6;
-                if (row == 2) return 9;
+                while (!PORTCbits.RC6) __delay_ms(5);
+                if (row == 0) return '3';
+                if (row == 1) return '6';
+                if (row == 2) return '9';
                 if (row == 3) return '#';
             }
+
+            // Check Column 4 (RC7)
             if (!PORTCbits.RC7) {
-                while (!PORTCbits.RC7); __delay_ms(5);
+                while (!PORTCbits.RC7) __delay_ms(5);
                 if (row == 0) return 'A';
                 if (row == 1) return 'B';
                 if (row == 2) return 'C';
@@ -134,80 +149,103 @@ char getKeypadKey() {
     }
 }
 
+
 // === Displays two digits on PORTB and PORTD ===
 void displayDigits(char high, char low) {
-    LATB = getSegment(high);  // High digit on PORTB
-    LATD = getSegment(low);   // Low digit on PORTD
+    // Convert the 'high' character to its 7-segment pattern and output it to PORTB
+    LATB = getSegment(high);   // Display the high digit on PORTB
+
+    // Convert the 'low' character to its 7-segment pattern and output it to PORTD
+    LATD = getSegment(low);    // Display the low digit on PORTD
 }
 
-// === Clears both 7-segment displays and the decimal dot ===
+// === Clears both 7-segment displays and the decimal/negative dot ===
 void clearDisplays() {
+    // Turn off all segments on the display connected to PORTB
     LATB = SEGMENT_OFF;
+
+    // Turn off all segments on the display connected to PORTD
     LATD = SEGMENT_OFF;
-    LATDbits.LATD0 = 0;  // Clear negative indicator dot
+
+    // Clear the negative indicator or decimal dot connected to LATD0
+    LATDbits.LATD0 = 0;
 }
+
 
 void main(void) {
     // === I/O Setup for Displays and Keypad ===
-    TRISB = 0x00; LATB = SEGMENT_OFF; ANSELB = 0x00;  // PORTB as output
-    TRISD = 0x00; LATD = SEGMENT_OFF; ANSELD = 0x00;  // PORTD as output
 
-    // Set RA0–RA3 as output for keypad rows
+    // Set PORTB as output for the first 7-segment display (high digit)
+    TRISB = 0x00;          // All PORTB pins as output
+    LATB = SEGMENT_OFF;    // Turn off display initially
+    ANSELB = 0x00;         // Disable analog function on PORTB (digital mode)
+
+    // Set PORTD as output for the second 7-segment display (low digit)
+    TRISD = 0x00;
+    LATD = SEGMENT_OFF;
+    ANSELD = 0x00;
+
+    // Configure RA0–RA3 as output for keypad row control
     TRISAbits.TRISA0 = 0;
     TRISAbits.TRISA1 = 0;
     TRISAbits.TRISA2 = 0;
     TRISAbits.TRISA3 = 0;
 
-    // Set RC4–RC7 as input for keypad columns
+    // Configure RC4–RC7 as input for keypad column reading
     TRISCbits.TRISC4 = 1;
     TRISCbits.TRISC5 = 1;
     TRISCbits.TRISC6 = 1;
     TRISCbits.TRISC7 = 1;
 
-    ANSELA = 0x00;  // Digital mode
-    ANSELC = 0x00;
+    ANSELA = 0x00;  // Set PORTA to digital mode
+    ANSELC = 0x00;  // Set PORTC to digital mode
 
-    // Enable pull-ups for column inputs
+    // Enable weak pull-up resistors for keypad column inputs
     WPUCbits.WPUC4 = 1;
     WPUCbits.WPUC5 = 1;
     WPUCbits.WPUC6 = 1;
     WPUCbits.WPUC7 = 1;
 
-    // === Startup animation: blink 0 on both displays 5 times ===
+    // === Startup Animation: Blink "0" on both displays 5 times ===
     for (int i = 0; i < 5; i++) {
         LATB = SEGMENT_0;
         LATD = SEGMENT_0;
-        __delay_ms(500);
-        clearDisplays();
-        __delay_ms(500);
+        __delay_ms(500);    // Display "00" for 500ms
+        clearDisplays();     // Turn off both displays
+        __delay_ms(500);    // Wait 500ms before next blink
     }
 
-    // === Variables ===
+    // === Variable Declarations ===
     char x_high = 0, x_low = 0, y_high = 0, y_low = 0;
     unsigned char x_input_REG = 0;
     unsigned char y_input_REG = 0;
     char operation = 'A';
-    unsigned char Operation_Reg = 0; // Store selected operation (ASCII)
+    unsigned char Operation_Reg = 0;  // Stores selected operation ('A', 'B', 'C', or 'D')
 
     while (1) {
-        // === First digit input ===
+        // === Get First Number: Tens Digit ===
         while (1) {
-            x_high = getKeypadKey();
-            if (x_high == '*') { clearDisplays(); continue; }
-            if (x_high >= 0 && x_high <= 9) break;
+            x_high = getKeypadKey();           // Wait for valid key
+            if (x_high == '*') {               // If clear button pressed
+                clearDisplays(); 
+                continue;
+            }
+            if (x_high >= 0 && x_high <= 9) break;  // Only accept digits 0–9
         }
-        LATB = getSegment(x_high);
+        LATB = getSegment(x_high);  // Display tens digit on PORTB
 
-        // === Second digit input ===
+        // === Get First Number: Units Digit ===
         while (1) {
             x_low = getKeypadKey();
             if (x_low == '*') { clearDisplays(); goto restart; }
             if (x_low >= 0 && x_low <= 9) break;
         }
-        LATD = getSegment(x_low);
+        LATD = getSegment(x_low);  // Display units digit on PORTD
+
+        // Combine tens and units to form full input (e.g., 4 and 2 → 42)
         x_input_REG = x_high * 10 + x_low;
 
-        // === Operation selection: A, B, C, D ===
+        // === Get Operation Selection (A = +, B = −, C = ×, D = ÷) ===
         while (1) {
             operation = getKeypadKey();
             if (operation == '*') { clearDisplays(); goto restart; }
@@ -217,9 +255,9 @@ void main(void) {
             }
         }
 
-        clearDisplays();
+        clearDisplays();  // Prepare for next input
 
-        // === Second input: tens digit ===
+        // === Get Second Number: Tens Digit ===
         while (1) {
             y_high = getKeypadKey();
             if (y_high == '*') { clearDisplays(); goto restart; }
@@ -227,7 +265,7 @@ void main(void) {
         }
         LATB = getSegment(y_high);
 
-        // === Second input: units digit ===
+        // === Get Second Number: Units Digit ===
         while (1) {
             y_low = getKeypadKey();
             if (y_low == '*') { clearDisplays(); goto restart; }
@@ -236,46 +274,50 @@ void main(void) {
         LATD = getSegment(y_low);
         y_input_REG = y_high * 10 + y_low;
 
-        // === Confirm with '#' ===
+        // === Confirm Operation with '#' ===
         while (1) {
             char confirm = getKeypadKey();
             if (confirm == '*') { clearDisplays(); goto restart; }
-            if (confirm == '#') break;
+            if (confirm == '#') break;  // Proceed on confirmation
         }
 
-        // === Perform selected operation ===
+        // === Perform Arithmetic Operation ===
         int result = 0;
         if (Operation_Reg == 'A') {
-            result = x_input_REG + y_input_REG;
+            result = x_input_REG + y_input_REG;       // Addition
         } else if (Operation_Reg == 'B') {
-            result = x_input_REG - y_input_REG;
+            result = x_input_REG - y_input_REG;       // Subtraction
         } else if (Operation_Reg == 'C') {
-            result = x_input_REG * y_input_REG;
+            result = x_input_REG * y_input_REG;       // Multiplication
         } else if (Operation_Reg == 'D') {
-            if (y_input_REG == 0) {  // Division by zero
+            if (y_input_REG == 0) {                   // Handle divide-by-zero
                 LATB = SEGMENT_E;
                 LATD = SEGMENT_E;
                 goto waitClear;
             }
-            result = x_input_REG / y_input_REG;
+            result = x_input_REG / y_input_REG;       // Division
         }
 
-        // === Display result or error ===
+        // === Display Result or Error ===
         if (result > 99 || result < -99) {
+            // Show "EE" for out-of-range result
             LATB = SEGMENT_E;
             LATD = SEGMENT_E;
         } else {
+            // Display result normally (absolute value)
             unsigned char absResult = (result < 0) ? -result : result;
-            LATB = getSegment(absResult / 10);
-            LATD = getSegment(absResult % 10);
-            if (result < 0) LATDbits.LATD0 = 1;  // Show negative with dot
+            LATB = getSegment(absResult / 10);        // Tens digit
+            LATD = getSegment(absResult % 10);        // Units digit
+
+            if (result < 0) LATDbits.LATD0 = 1;       // Turn on dot for negative sign
         }
 
-        // === Wait for user to clear ===
+        // === Wait for Clear '*' to Restart ===
         waitClear:
-        while (getKeypadKey() != '*');
-        clearDisplays();
+        while (getKeypadKey() != '*');   // Block until user presses '*'
+        clearDisplays();                 // Reset displays
 
+        // === Restart from beginning ===
         restart: ;
     }
 }
