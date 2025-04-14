@@ -1,3 +1,35 @@
+//;---------------------
+//; Title: Multi-Mode Security Control System Using PIC18F47K42 with LCD, Keypad, Relay, and Buzzer
+//;---------------------
+//; Program Details:
+//This project is a multi-mode embedded system built around the PIC18F47K42 
+//microcontroller, featuring an LCD, 4x4 keypad, relay, and buzzer. It allows 
+//users to toggle a relay, count up/down, set a 2-digit password, and verify it 
+//for access control. The system provides visual feedback on an LCD and 
+//includes an emergency interrupt that halts operations and activates a buzze
+
+//; Inputs: 
+//4x4 Keypad	RA0–RA3 (rows), RC4–RC7 (columns)
+//Push Button	RA5
+//Count Buttons	RD5, RD6
+//Emergency Stop	RC2
+
+//; Outputs: 
+//LCD 16x2	PORTB (Data), RD0, RD1 (Control)
+//Relay	RA4
+//Buzzer	RD7
+
+//; Date:  4/13/2025
+//; File Dependencies / Libraries: None 
+//; Compiler: xc8, 3.0
+//; Author: Eduardo Williams 
+//; Versions:
+//;       V1.0: First Version 
+//; Useful links: 
+//;       Datasheet: https://ww1.microchip.com/downloads/en/DeviceDoc/PIC18(L)F26-27-45-46-47-55-56-57K42-Data-Sheet-40001919G.pdf 
+//;       PIC18F Instruction Sets: https://onlinelibrary.wiley.com/doi/pdf/10.1002/9781119448457.app4 
+//;       GITHUB: https://github.com/EduardoWilliams91/EE-310-Microprocessors-and-System-Design/tree/main/Microcontroller_EE310
+
 // === CONFIG BITS ===
 #pragma config FEXTOSC = LP
 #pragma config RSTOSC = EXTOSC
