@@ -35,10 +35,9 @@
 #include <xc.h>
 #include <stdio.h>
 #include <string.h>
-#include "C:\Program Files\Microchip\xc8\v3.00\pic\include\proc\pic18f47k42.h"
 
 #define _XTAL_FREQ 4000000
-#define Vref 5.0
+#define Vref 3.3
 
 // LCD Connections
 #define RS LATD0
@@ -58,12 +57,21 @@ void MSdelay(unsigned int);
 void ADC_Init(void);
 
 // Global Variables
-int digital = 0;
+uint16_t digital = 0;
 float voltage = 0.0;
-char data[10];
+char data[17];
 
 void main(void)
 {
+    // Set Ports First
+    LCD_Port = 0x00;
+    LCD_Control = 0x00;
+    TRISB = 0x00;
+    TRISDbits.TRISD0 = 0;
+    TRISDbits.TRISD1 = 0;
+
+    __delay_ms(50); // Startup stabilization after unplug/replug
+
     LCD_Init();
     LCD_Clear();
     ADC_Init();
@@ -77,65 +85,52 @@ void main(void)
 
     while (1)
     {
-        ADCON0bits.GO = 1;              // Start ADC
+        ADCON0bits.GO = 1;              // Start ADC conversion
         while (ADCON0bits.GO);           // Wait until done
 
-        digital = ((ADRESH << 8) | ADRESL);   // 10-bit result
-        voltage = (digital * Vref) / 4096.0;  // Calculate voltage
+        digital = ((uint16_t)ADRESH << 8) | ADRESL; // Get 10-bit result
+        voltage = ((float)digital * Vref) / 4096.0f; // Calculate voltage
 
-        sprintf(data, "V=%.2fV", voltage);    // Format string
+        sprintf(data, "V = %.2f V", voltage);
 
         LCD_String_xy(1, 0, "Voltage Reading:");
+        LCD_String_xy(2, 0, "                "); // Clear line first
         LCD_String_xy(2, 0, data);
 
-        __delay_ms(500); // Update every 0.5s
+        __delay_ms(500); // Update every 0.5 sec
     }
 }
 
 // === ADC Initialization ===
 void ADC_Init(void)
 {
-    ADCON0bits.ADON = 0;        // Turn off ADC
-    ADCON0bits.FM = 1;          // Right justified
-    ADCON0bits.CS = 1;          // Use internal oscillator
-    ADCON0bits.ON = 1;          // Turn on ADC
-
     TRISAbits.TRISA0 = 1;       // RA0 as input
-    ANSELAbits.ANSELA0 = 1;     // RA0 as analog
+    ANSELAbits.ANSELA0 = 1;     // RA0 analog
 
-    ADPCH = 0b000000;           // AN0 selected
+    ADPCH = 0b000000;           // Select AN0
 
-    ADCLK = 0x00;               // Clock divider
+    ADCON0bits.CS = 1;          // Use internal clock
+    ADCLK = 0x3F;               // Slow ADC clock divider for stability
 
-    ADRESH = 0;                 // Clear result
-    ADRESL = 0;
+    ADCON0bits.FM = 1;          // Right justified
+    ADCON0bits.ON = 1;          // Turn ADC ON
 
-    ADPREL = 0x00;              // Precharge
-    ADPREH = 0x00;
-
-    ADACQL = 0x00;              // Acquisition time
-    ADACQH = 0x00;
+    ADRESH = 0x00;              // Clear results
+    ADRESL = 0x00;
 }
 
 // === LCD Functions ===
 void LCD_Init()
 {
-    MSdelay(20); // Give LCD controller time to power up properly
+    MSdelay(20); // Wait for LCD to power up properly
 
-    LCD_Port = 0x00;      // Clear PORTB (data bus)
-    LCD_Control = 0x00;   // Clear control lines
-
-    TRISB = 0x00;         // Set PORTB (D0-D7) as output
-    TRISDbits.TRISD0 = 0; // Set RD0 (RS) as output
-    TRISDbits.TRISD1 = 0; // Set RD1 (EN) as output
-
-    LCD_Command(0x38);    // 8-bit, 2 line, 5x8 font
+    LCD_Command(0x38);    // Function set: 8-bit, 2 lines, 5x8 dots
     MSdelay(5);
 
     LCD_Command(0x0C);    // Display ON, Cursor OFF
     MSdelay(5);
 
-    LCD_Command(0x06);    // Entry mode: increment cursor
+    LCD_Command(0x06);    // Entry mode: Increment cursor
     MSdelay(5);
 
     LCD_Command(0x01);    // Clear display
@@ -147,7 +142,7 @@ void LCD_Command(char cmd)
     ldata = cmd;
     RS = 0;
     EN = 1; NOP(); EN = 0;
-    MSdelay(3);
+    MSdelay(2);
 }
 
 void LCD_Char(char dat)
@@ -160,7 +155,8 @@ void LCD_Char(char dat)
 
 void LCD_String(const char *msg)
 {
-    while (*msg) LCD_Char(*msg++);
+    while (*msg)
+        LCD_Char(*msg++);
 }
 
 void LCD_String_xy(char row, char pos, const char *msg)
@@ -173,6 +169,7 @@ void LCD_String_xy(char row, char pos, const char *msg)
 void LCD_Clear()
 {
     LCD_Command(0x01);
+    MSdelay(2);
 }
 
 // === Blocking Delay ===
